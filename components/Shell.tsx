@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart3, ClipboardCheck, Headset, LogOut, Menu, Table2, Upload, Users, X } from "lucide-react";
+import { BarChart3, ClipboardCheck, Headset, ListChecks, LogOut, Menu, Table2, Upload, Users, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types";
 
@@ -12,6 +12,7 @@ const nav = [
   { href: "/closing", label: "Shift closing", icon: ClipboardCheck, admin: false },
   { href: "/summaries", label: "Summaries", icon: BarChart3, admin: false },
   { href: "/services", label: "Services", icon: Headset, admin: false },
+  { href: "/lists", label: "Lists", icon: ListChecks, admin: false },
   { href: "/import", label: "Import CSV", icon: Upload, admin: true },
   { href: "/team", label: "Team", icon: Users, admin: true },
 ];

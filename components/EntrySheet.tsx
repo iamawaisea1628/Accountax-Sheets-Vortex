@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { fmtDate, fmtMoney, monthStartISO, parseAmount, todayISO } from "@/lib/format";
 import { STATUSES, type Entry, type EntryType, type Profile } from "@/lib/types";
 
-type Props = { profile: Profile; offices: string[]; shifts: string[]; managers: { id: string; name: string }[] };
+type Props = { profile: Profile; offices: string[]; shifts: string[]; allOffices: string[]; allShifts: string[]; accounts: string[]; groups: string[]; managers: { id: string; name: string }[] };
+const opt = (list: string[], v: string) => (v && !list.includes(v) ? [...list, v] : list);
 const PAGE = 100;
 
 const pill: Record<string, string> = {
@@ -18,7 +19,7 @@ const GREEN = ["Deposit", "Transfer In", "Outdoor In"];
 const RED = ["Redeem", "Withdraw", "Written Off", "Transfer Out", "Ads", "Outdoor Out"];
 const amountColor = (s: string) => (GREEN.includes(s) ? "text-brand-dark" : RED.includes(s) ? "text-danger" : "text-ink");
 
-export default function EntrySheet({ profile, offices, shifts, managers }: Props) {
+export default function EntrySheet({ profile, offices, shifts, allOffices, allShifts, accounts, groups, managers }: Props) {
   const sb = useMemo(() => createClient(), []);
   const isAdmin = profile.role === "admin";
   const [type, setType] = useState<EntryType>("main");
@@ -39,6 +40,9 @@ export default function EntrySheet({ profile, offices, shifts, managers }: Props
   const [editing, setEditing] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const customerRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [accts, setAccts] = useState(accounts);
+  const [addAcct, setAddAcct] = useState("");
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
   const setFilter = (patch: Partial<typeof f>) => { setF((p) => ({ ...p, ...patch })); setPage(0); };
 
@@ -71,10 +75,14 @@ export default function EntrySheet({ profile, offices, shifts, managers }: Props
     setErr("");
     const amount = parseAmount(form.amount);
     if (!form.entry_date) return setErr("Pick a date.");
-    if (!form.account_name.trim()) return setErr("Enter the account name.");
+    const typed = form.account_name.trim();
+    if (!typed) return setErr("Enter the account name.");
+    const known = accts.find((a) => a.toLowerCase() === typed.toLowerCase());
+    if (!known) { setAddAcct(typed); return setErr(`"${typed}" is not in the Chime accounts list.`); }
+    setAddAcct("");
     if (amount === null) return setErr("Enter a valid amount, like 25 or 25.50.");
     const payload = {
-      entry_date: form.entry_date, entry_type: type, account_name: form.account_name.trim(),
+      entry_date: form.entry_date, entry_type: type, account_name: known,
       customer_name: form.customer_name.trim() || null, amount, status: form.status,
       office: form.office || null, shift: form.shift || null,
       manager_id: form.manager_id || null, manager_name: form.manager_name || null,
@@ -97,6 +105,15 @@ export default function EntrySheet({ profile, offices, shifts, managers }: Props
     }
     setPage(0);
     load();
+  }
+
+  async function addAndSave() {
+    const name = addAcct;
+    const { error } = await sb.from("accounts").insert({ name });
+    if (error && !/duplicate/i.test(error.message)) return setErr(error.message);
+    setAccts((p) => (p.includes(name) ? p : [...p, name].sort((a, b) => a.localeCompare(b))));
+    setAddAcct(""); setErr("");
+    setTimeout(() => formRef.current?.requestSubmit(), 0);
   }
 
   function startEdit(r: Entry) {
@@ -136,19 +153,19 @@ export default function EntrySheet({ profile, offices, shifts, managers }: Props
         </div>
       </div>
 
-      <form onSubmit={save} className={`card mt-6 p-4 transition ${editing ? "ring-2 ring-gold/60" : ""}`}>
+      <form ref={formRef} onSubmit={save} className={`card mt-6 p-4 transition ${editing ? "ring-2 ring-gold/60" : ""}`}>
         {editing && <p className="mb-3 text-sm font-semibold text-gold">Editing entry #{editing}</p>}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-12">
           <div className="2xl:col-span-1"><label className="lbl">Date</label><input type="date" className="field" value={form.entry_date} onChange={(e) => set("entry_date", e.target.value)} /></div>
-          <div className="2xl:col-span-2"><label className="lbl">Account name</label><input className="field" value={form.account_name} onChange={(e) => set("account_name", e.target.value)} placeholder="Account" /></div>
+          <div className="2xl:col-span-2"><label className="lbl">Account name</label><input className="field" list="acct-list" autoComplete="off" value={form.account_name} onChange={(e) => { set("account_name", e.target.value); setAddAcct(""); }} placeholder="Start typing…" /><datalist id="acct-list">{accts.map((a) => <option key={a} value={a} />)}</datalist></div>
           <div className="2xl:col-span-2"><label className="lbl">Customer name</label><input ref={customerRef} className="field" value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} placeholder="Customer" /></div>
           <div className="2xl:col-span-1"><label className="lbl">Amount</label><input inputMode="decimal" className="field tnum" value={form.amount} onChange={(e) => set("amount", e.target.value)} placeholder="0.00" /></div>
           <div className="2xl:col-span-1"><label className="lbl">Status</label>
             <select className="field" value={form.status} onChange={(e) => set("status", e.target.value)}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select></div>
           <div className="2xl:col-span-1"><label className="lbl">Office</label>
-            <select className="field" value={form.office} onChange={(e) => set("office", e.target.value)}><option value="">—</option>{offices.map((o) => <option key={o}>{o}</option>)}</select></div>
+            <select className="field" value={form.office} onChange={(e) => set("office", e.target.value)}><option value="">—</option>{opt(offices, form.office).map((o) => <option key={o}>{o}</option>)}</select></div>
           <div className="2xl:col-span-1"><label className="lbl">Shift</label>
-            <select className="field" value={form.shift} onChange={(e) => set("shift", e.target.value)}><option value="">—</option>{shifts.map((o) => <option key={o}>{o}</option>)}</select></div>
+            <select className="field" value={form.shift} onChange={(e) => set("shift", e.target.value)}><option value="">—</option>{opt(shifts, form.shift).map((o) => <option key={o}>{o}</option>)}</select></div>
           <div className="2xl:col-span-1"><label className="lbl">Manager</label>
             {isAdmin ? (
               <select className="field" value={form.manager_id} onChange={(e) => { const m = managers.find((x) => x.id === e.target.value); setForm((p) => ({ ...p, manager_id: e.target.value, manager_name: m?.name ?? p.manager_name })); }}>
@@ -157,10 +174,15 @@ export default function EntrySheet({ profile, offices, shifts, managers }: Props
               </select>
             ) : <input className="field bg-paper" value={profile.full_name} readOnly />}
           </div>
-          <div className="2xl:col-span-1"><label className="lbl">Group</label><input className="field" value={form.grp} onChange={(e) => set("grp", e.target.value)} /></div>
+          <div className="2xl:col-span-1"><label className="lbl">Group</label><input className="field" list="grp-list" value={form.grp} onChange={(e) => set("grp", e.target.value)} /><datalist id="grp-list">{groups.map((g) => <option key={g} value={g} />)}</datalist></div>
           <div className="col-span-2 md:col-span-4 xl:col-span-6 2xl:col-span-12"><label className="lbl">Remarks</label><input className="field" value={form.remarks} onChange={(e) => set("remarks", e.target.value)} placeholder="Optional note" /></div>
         </div>
-        {err && <p role="alert" className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
+        {err && (
+          <div role="alert" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
+            <span>{err}</span>
+            {addAcct && <button type="button" onClick={addAndSave} className="btn-ghost !px-3 !py-1 text-ink">Add &quot;{addAcct}&quot; and save</button>}
+          </div>
+        )}
         <div className="mt-4 flex gap-2">
           <button className="btn-primary" disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -175,8 +197,8 @@ export default function EntrySheet({ profile, offices, shifts, managers }: Props
           <div><label className="lbl">From</label><input type="date" className="field" value={f.from} onChange={(e) => setFilter({ from: e.target.value })} /></div>
           <div><label className="lbl">To</label><input type="date" className="field" value={f.to} onChange={(e) => setFilter({ to: e.target.value })} /></div>
           <div><label className="lbl">Status</label><select className="field" value={f.status} onChange={(e) => setFilter({ status: e.target.value })}><option value="">All</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select></div>
-          <div><label className="lbl">Office</label><select className="field" value={f.office} onChange={(e) => setFilter({ office: e.target.value })}><option value="">All</option>{offices.map((o) => <option key={o}>{o}</option>)}</select></div>
-          <div><label className="lbl">Shift</label><select className="field" value={f.shift} onChange={(e) => setFilter({ shift: e.target.value })}><option value="">All</option>{shifts.map((o) => <option key={o}>{o}</option>)}</select></div>
+          <div><label className="lbl">Office</label><select className="field" value={f.office} onChange={(e) => setFilter({ office: e.target.value })}><option value="">All</option>{allOffices.map((o) => <option key={o}>{o}</option>)}</select></div>
+          <div><label className="lbl">Shift</label><select className="field" value={f.shift} onChange={(e) => setFilter({ shift: e.target.value })}><option value="">All</option>{allShifts.map((o) => <option key={o}>{o}</option>)}</select></div>
           <div className="min-w-[220px] flex-1"><label className="lbl">Search</label>
             <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-ink/40" /><input className="field pl-9" placeholder="Account, customer or remarks" value={qInput} onChange={(e) => setQInput(e.target.value)} /></div></div>
         </div>

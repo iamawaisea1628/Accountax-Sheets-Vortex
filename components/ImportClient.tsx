@@ -65,6 +65,10 @@ export default function ImportClient() {
     const shifts = Array.from(new Set(rows.map((r) => r.shift).filter(Boolean))) as string[];
     if (offices.length) await sb.from("offices").upsert(offices.map((name) => ({ name })), { onConflict: "name", ignoreDuplicates: true });
     if (shifts.length) await sb.from("shifts").upsert(shifts.map((name) => ({ name })), { onConflict: "name", ignoreDuplicates: true });
+    const accounts = Array.from(new Set(rows.map((r) => r.account_name)));
+    const groups = Array.from(new Set(rows.map((r) => r.grp).filter(Boolean))) as string[];
+    if (accounts.length) await sb.from("accounts").upsert(accounts.map((name) => ({ name })), { onConflict: "name", ignoreDuplicates: true });
+    if (groups.length) await sb.from("groups").upsert(groups.map((name) => ({ name })), { onConflict: "name", ignoreDuplicates: true });
     const BATCH = 500;
     for (let i = 0; i < rows.length; i += BATCH) {
       const chunk = rows.slice(i, i + BATCH).map((r) => ({ ...r, entry_type: type }));
