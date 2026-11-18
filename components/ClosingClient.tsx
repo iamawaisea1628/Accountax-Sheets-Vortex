@@ -6,7 +6,7 @@ import { addEntry, balanceOf, differenceOf, emptySums, r2, type Sums } from "@/l
 import { fmtMoney, parseAmount, todayISO } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 
-type Row = { account: string; sums: Sums; prev: number; saved: boolean };
+type Row = { account: string; sums: Sums; prev: number; saved: boolean; carried: boolean };
 
 const COLS: [keyof Sums, string][] = [
   ["opening", "Opening entry"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
@@ -53,22 +53,32 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
         sb.from("closings").select("closing_date,shift,account_name,closing").lte("closing_date", date)
           .order("closing_date", { ascending: false }).order("id", { ascending: false }).range(a, b));
 
+      // Last closing before this shift = the latest saved closing by (date, shift order)
       const cur = shifts.indexOf(shift);
-      const prevMap = new Map<string, number>();
+      const best = new Map<string, { d: string; i: number; v: number }>();
       for (const h of hist) {
-        const before = h.closing_date < date || (h.closing_date === date && shifts.indexOf(h.shift) < cur);
-        if (before && !prevMap.has(h.account_name)) prevMap.set(h.account_name, Number(h.closing));
+        const i = shifts.indexOf(h.shift);
+        const before = h.closing_date < date || (h.closing_date === date && i < cur);
+        if (!before) continue;
+        const b = best.get(h.account_name);
+        if (!b || h.closing_date > b.d || (h.closing_date === b.d && i > b.i)) best.set(h.account_name, { d: h.closing_date, i, v: Number(h.closing) });
       }
+      const prevMap = new Map<string, number>(Array.from(best.entries()).map(([k, b]) => [k, b.v]));
+
       const sums = new Map<string, Sums>();
+      const withEntries = new Set<string>();
       for (const e of entries) {
         if (!sums.has(e.account_name)) sums.set(e.account_name, emptySums());
         addEntry(sums.get(e.account_name)!, e);
+        withEntries.add(e.account_name);
       }
       const savedMap = new Map<string, number>(saved.map((s) => [s.account_name as string, Number(s.closing)]));
       for (const a of savedMap.keys()) if (!sums.has(a)) sums.set(a, emptySums());
+      // Carry over: accounts with a balance from the previous shift appear even with no entries today
+      for (const [a, v] of prevMap) if (Math.abs(v) > 0.005 && !sums.has(a)) sums.set(a, emptySums());
 
       const list: Row[] = Array.from(sums.keys()).sort((x, y) => x.localeCompare(y))
-        .map((account) => ({ account, sums: sums.get(account)!, prev: prevMap.get(account) ?? 0, saved: savedMap.has(account) }));
+        .map((account) => ({ account, sums: sums.get(account)!, prev: prevMap.get(account) ?? 0, saved: savedMap.has(account), carried: !withEntries.has(account) && !savedMap.has(account) }));
       setRows(list);
       setInputs(Object.fromEntries(Array.from(savedMap.entries()).map(([k, v]) => [k, String(v)])));
     } catch (e) {
@@ -151,7 +161,7 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
                 const bad = r.diff !== null && Math.abs(r.diff) > 0.005;
                 return (
                   <tr key={r.account} className="hover:bg-brand-soft/40">
-                    <td className="td sticky left-0 bg-white font-semibold">{r.account}{r.saved && <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-dark">saved</span>}</td>
+                    <td className="td sticky left-0 bg-white font-semibold">{r.account}{r.saved && <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-dark">saved</span>}{r.carried && <span className="ml-2 rounded-full bg-ink/10 px-2 py-0.5 text-[11px] font-semibold text-ink/60">carried over</span>}</td>
                     <td className="td tnum text-right">{fmtMoney(r.prev)}</td>
                     <td className="td w-36"><input inputMode="decimal" className="field tnum py-1.5 text-right" placeholder="0.00" value={inputs[r.account] ?? ""} onChange={(e) => setInputs((p) => ({ ...p, [r.account]: e.target.value }))} /></td>
                     <td className={`td tnum text-right font-semibold ${r.diff === null ? "text-ink/25" : bad ? "text-danger" : "text-brand-dark"}`}>{r.diff === null ? "–" : fmtMoney(r.diff)}</td>
@@ -161,7 +171,7 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
                 );
               })}
               {!loading && calc.length === 0 && (
-                <tr><td colSpan={5 + COLS.length} className="px-4 py-14 text-center text-sm text-ink/55">No entries for this date and shift. Add entries on the entry sheet, or pick another date or shift.</td></tr>
+                <tr><td colSpan={5 + COLS.length} className="px-4 py-14 text-center text-sm text-ink/55">No entries or carried-over balances for this date and shift. Add entries on the entry sheet, or pick another date or shift.</td></tr>
               )}
             </tbody>
           </table>
