@@ -40,9 +40,10 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepMessages = false) => {
     if (!shift) return;
-    setLoading(true); setErr(""); setNote("");
+    setLoading(true);
+    if (!keepMessages) { setErr(""); setNote(""); }
     try {
       const entries = await fetchAll((a, b) =>
         sb.from("entries").select("account_name,entry_type,status,amount,office").eq("entry_date", date).eq("shift", shift).order("id").range(a, b));
@@ -95,9 +96,17 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
     }));
     const { error } = await sb.from("closings").upsert(payload, { onConflict: "closing_date,shift,account_name" });
     setSaving(false);
-    if (error) return setErr(error.message);
-    setNote(`Saved ${payload.length} closings. They become the opening for the next shift.`);
-    load();
+    if (error) {
+      const blocked = error.code === "42501" || /row-level security|permission/i.test(error.message);
+      const missing = error.code === "42P01" || /does not exist|schema cache/i.test(error.message);
+      return setErr(
+        blocked ? "The database refused this save (missing permission for closings). Run the closings repair SQL from the chat, then try again."
+        : missing ? "The closings table is missing. Run the closings repair SQL from the chat, then try again."
+        : `Save failed: ${error.message}`
+      );
+    }
+    setNote(`Saved ${payload.length} closing${payload.length === 1 ? "" : "s"} for ${shift}. They become the opening for the next shift.`);
+    await load(true);
   }
 
   return (
