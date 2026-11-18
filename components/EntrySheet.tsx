@@ -14,7 +14,9 @@ const pill: Record<string, string> = {
   Redeem: "bg-danger/10 text-danger",
   Opening: "bg-ink/10 text-ink",
 };
-const amountColor = (s: string) => (s === "Deposit" ? "text-brand-dark" : s === "Redeem" ? "text-danger" : "text-ink");
+const GREEN = ["Deposit", "Transfer In", "Outdoor In"];
+const RED = ["Redeem", "Withdraw", "Written Off", "Transfer Out", "Ads", "Outdoor Out"];
+const amountColor = (s: string) => (GREEN.includes(s) ? "text-brand-dark" : RED.includes(s) ? "text-danger" : "text-ink");
 
 export default function EntrySheet({ profile, offices, shifts, managers }: Props) {
   const sb = useMemo(() => createClient(), []);

@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="card max-w-md p-6">
           <h1 className="font-display text-xl font-bold">Profile not found</h1>
           <p className="mt-2 text-sm text-ink/70">
-            Your login works but has no profile row yet. Run the setup SQL in Supabase (supabase/schema.sql), then add the user again.
+            Your login works but has no profile row yet. Run the setup SQL in the Supabase SQL Editor, then add the user again.
           </p>
         </div>
       </div>

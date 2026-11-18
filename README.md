@@ -7,7 +7,7 @@ Stack: Next.js 15, Supabase (login and database), Tailwind, Framer Motion. Hoste
 ## 1. Set up Supabase (10 minutes)
 
 1. Create a project at supabase.com and wait for it to finish starting.
-2. Open **SQL Editor > New query**, paste the whole of `supabase/schema.sql`, and press **Run**.
+2. Open **SQL Editor > New query**, paste the SQL blocks Claude gives you in the chat, and press **Run**. Database changes are never part of the zip.
 3. Open **Authentication > Users > Add user > Create new user**. Enter your email and a password, and tick **Auto confirm user**.
 4. Make yourself admin. In the SQL Editor run (use your email):
 
@@ -25,7 +25,7 @@ Stack: Next.js 15, Supabase (login and database), Tailwind, Framer Motion. Hoste
 ## 3. Deploy on Vercel
 
 1. In Vercel choose **Add New > Project** and import the GitHub repository.
-2. Before pressing Deploy, open **Environment Variables** and add these three (names exactly as written):
+2. If you linked Supabase to Vercel, these three variables are usually added for you. Check **Settings > Environment Variables**; if any is missing, add it (names exactly as written):
 
    | Name | Value |
    |---|---|
