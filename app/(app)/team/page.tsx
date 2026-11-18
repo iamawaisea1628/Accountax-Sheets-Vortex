@@ -9,6 +9,9 @@ export default async function TeamPage() {
   if (!user) redirect("/login");
   const { data: me } = await sb.from("profiles").select("role").eq("id", user.id).single();
   if (me?.role !== "admin") redirect("/entries");
-  const { data } = await sb.from("profiles").select("*").order("created_at");
-  return <TeamClient people={(data ?? []) as Profile[]} meId={user.id} />;
+  const [{ data }, { data: services }] = await Promise.all([
+    sb.from("profiles").select("*").order("created_at"),
+    sb.from("services").select("id, name").order("name"),
+  ]);
+  return <TeamClient people={(data ?? []) as Profile[]} meId={user.id} services={(services ?? []) as { id: number; name: string }[]} />;
 }

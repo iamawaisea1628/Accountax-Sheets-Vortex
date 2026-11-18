@@ -22,5 +22,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
     );
   }
+  if (profile.role === "service") redirect("/portal");
   return <Shell profile={profile as Profile}>{children}</Shell>;
 }

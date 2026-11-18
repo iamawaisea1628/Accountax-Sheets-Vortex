@@ -11,14 +11,11 @@ const nav = [
   { href: "/entries", label: "Entry sheet", icon: Table2, admin: false },
   { href: "/closing", label: "Shift closing", icon: ClipboardCheck, admin: false },
   { href: "/summaries", label: "Summaries", icon: BarChart3, admin: false },
+  { href: "/services", label: "Services", icon: Headset, admin: false },
   { href: "/import", label: "Import CSV", icon: Upload, admin: true },
   { href: "/team", label: "Team", icon: Users, admin: true },
 ];
-const soon = [
-  { label: "Services portal", icon: Headset },
-];
-
-const initials = (p: Profile) =>
+export const initials = (p: Profile) =>
   (p.full_name || p.email || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 
 function Nav({ profile, path, always }: { profile: Profile; path: string; always?: boolean }) {
@@ -44,20 +41,11 @@ function Nav({ profile, path, always }: { profile: Profile; path: string; always
         })}
       </nav>
 
-      <div className="mt-8 space-y-1">
-        <p className={`mb-2 whitespace-nowrap px-3.5 text-xs font-semibold text-white/40 ${t}`}>Coming next</p>
-        {soon.map((n) => (
-          <div key={n.label} title={n.label} className="flex items-center gap-3 px-3.5 py-2 text-sm text-white/35">
-            <n.icon className="h-5 w-5 shrink-0" />
-            <span className={`whitespace-nowrap ${t}`}>{n.label}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
 
-function ProfileMenu({ profile, onSignOut }: { profile: Profile; onSignOut: () => void }) {
+export function ProfileMenu({ profile, onSignOut }: { profile: Profile; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
