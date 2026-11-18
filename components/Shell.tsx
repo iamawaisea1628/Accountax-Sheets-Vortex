@@ -10,11 +10,11 @@ import type { Profile } from "@/lib/types";
 const nav = [
   { href: "/entries", label: "Entry sheet", icon: Table2, admin: false },
   { href: "/closing", label: "Shift closing", icon: ClipboardCheck, admin: false },
+  { href: "/summaries", label: "Summaries", icon: BarChart3, admin: false },
   { href: "/import", label: "Import CSV", icon: Upload, admin: true },
   { href: "/team", label: "Team", icon: Users, admin: true },
 ];
 const soon = [
-  { label: "Summaries", icon: BarChart3 },
   { label: "Services portal", icon: Headset },
 ];
 
