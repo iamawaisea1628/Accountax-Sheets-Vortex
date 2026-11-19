@@ -11,10 +11,10 @@ type SortKey = "key" | "balance" | "opening" | SumKey;
 type Raw = { entry_date: string; account_name: string; entry_type: "main" | "service"; status: string; amount: number; office: string | null; shift: string | null };
 type Line = { key: string; sums: Sums; opening: number; balance: number };
 
-const GROUPS: [Group, string][] = [["account", "Chime"], ["office", "Office"], ["day", "Day"], ["month", "Month"], ["shift", "Shift"]];
+const GROUPS: [Group, string][] = [["account", "Account"], ["office", "Office"], ["day", "Day"], ["month", "Month"], ["shift", "Shift"]];
 // Columns exactly as in the Summary-Month sheet (Forfeited Funds and Tag Status left out)
 const COLS: [SumKey, string][] = [
-  ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"], ["redeemService", "Redeem-Service"],
+  ["deposit", "Deposit Main"], ["redeem", "Redeem Main"], ["depositService", "Deposit-Service"], ["redeemService", "Redeem-Service"],
   ["withdraw", "Withdraw"], ["transfer", "Transfer"], ["ads", "Ads"], ["other", "Other Transaction"],
   ["writtenOff", "Written Off"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
 ];
@@ -165,7 +165,7 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Summaries</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink/60">Built live from the entry sheet, with the same columns as your Summary-Month sheet. Group by Chime, office, day, month or shift.</p>
+          <p className="mt-1 max-w-2xl text-sm text-ink/60">Built live from the entry sheet, with the same columns as your Summary-Month sheet. Group by account, office, day, month or shift.</p>
         </div>
         <button className="btn-ghost" onClick={exportCsv} disabled={lines.length === 0}><Download className="h-4 w-4" /> Export CSV</button>
       </div>

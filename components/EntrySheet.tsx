@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fmtDate, fmtMoney, monthStartISO, parseAmount, todayISO } from "@/lib/format";
 import { STATUSES, type Entry, type EntryType, type Profile } from "@/lib/types";
 
-type Props = { profile: Profile; offices: string[]; shifts: string[]; allOffices: string[]; allShifts: string[]; accounts: string[]; groups: string[]; managers: { id: string; name: string }[] };
+type Props = { profile: Profile; offices: string[]; shifts: string[]; allOffices: string[]; serviceOffices: string[]; allServiceOffices: string[]; allShifts: string[]; accounts: string[]; groups: string[]; managers: { id: string; name: string }[] };
 const opt = (list: string[], v: string) => (v && !list.includes(v) ? [...list, v] : list);
 const PAGE = 100;
 
@@ -19,7 +19,7 @@ const GREEN = ["Deposit", "Transfer In", "Outdoor In"];
 const RED = ["Redeem", "Withdraw", "Transfer Out", "Ads", "Written Off", "Outdoor Out"];
 const amountColor = (s: string) => (GREEN.includes(s) ? "text-brand-dark" : RED.includes(s) ? "text-danger" : "text-ink");
 
-export default function EntrySheet({ profile, offices, shifts, allOffices, allShifts, accounts, groups, managers }: Props) {
+export default function EntrySheet({ profile, offices, shifts, allOffices, serviceOffices, allServiceOffices, allShifts, accounts, groups, managers }: Props) {
   const sb = useMemo(() => createClient(), []);
   const isAdmin = profile.role === "admin";
   const [type, setType] = useState<EntryType>("main");
@@ -32,9 +32,13 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
   const [err, setErr] = useState("");
   const [newId, setNewId] = useState<number | null>(null);
 
+  // Main and Service sheets have different office lists
+  const curOffices = type === "main" ? offices : serviceOffices;
+  const curAll = type === "main" ? allOffices : allServiceOffices;
+
   const blank = () => ({
     entry_date: todayISO(), account_name: "", customer_name: "", amount: "", status: "Deposit",
-    office: offices[0] ?? "", shift: shifts[0] ?? "", manager_id: profile.id, manager_name: profile.full_name, grp: "", remarks: "",
+    office: curOffices[0] ?? "", shift: shifts[0] ?? "", manager_id: profile.id, manager_name: profile.full_name, grp: "", remarks: "",
   });
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState<number | null>(null);
@@ -69,6 +73,12 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
     setLoading(false);
   }, [sb, type, f, page]);
   useEffect(() => { load(); }, [load]);
+
+  function switchType(t: EntryType) {
+    setType(t); setPage(0); setEditing(null); setErr(""); setAddAcct("");
+    setF((p) => ({ ...p, office: "" }));
+    setForm((p) => ({ ...p, office: (t === "main" ? offices : serviceOffices)[0] ?? "" }));
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -145,7 +155,7 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
         </div>
         <div className="relative flex rounded-lg bg-[#dfe8e2] p-1">
           {(["main", "service"] as EntryType[]).map((t) => (
-            <button key={t} onClick={() => { setType(t); setPage(0); }} className="relative rounded-md px-5 py-1.5 text-sm font-semibold capitalize">
+            <button key={t} onClick={() => switchType(t)} className="relative rounded-md px-5 py-1.5 text-sm font-semibold capitalize">
               {type === t && <motion.span layoutId="type-pill" className="absolute inset-0 rounded-md bg-gradient-to-r from-[#1ccb98] to-[#0b7f68] shadow-md shadow-brand/30" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
               <span className={`relative ${type === t ? "text-white" : "text-ink/55"}`}>{t}</span>
             </button>
@@ -162,7 +172,7 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
         {type === "main" && form.office === "Unconfirmed" && (
           <div role="note" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-gold/15 px-3 py-2 text-sm text-[#7a520a]">
             <span>Unconfirmed entries belong on the Service sheet. On the Main sheet they will not count as Unconfirmed.</span>
-            <button type="button" className="btn-ghost !px-3 !py-1" onClick={() => { setType("service"); setPage(0); }}>Switch to Service sheet</button>
+            <button type="button" className="btn-ghost !px-3 !py-1" onClick={() => switchType("service")}>Switch to Service sheet</button>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-12">
@@ -173,7 +183,7 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
           <div className="2xl:col-span-1"><label className="lbl">Status</label>
             <select className="field" value={form.status} onChange={(e) => set("status", e.target.value)}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select></div>
           <div className="2xl:col-span-1"><label className="lbl">Office</label>
-            <select className="field" value={form.office} onChange={(e) => set("office", e.target.value)}><option value="">—</option>{opt(offices, form.office).map((o) => <option key={o}>{o}</option>)}</select></div>
+            <select className="field" value={form.office} onChange={(e) => set("office", e.target.value)}><option value="">—</option>{opt(curOffices, form.office).map((o) => <option key={o}>{o}</option>)}</select></div>
           <div className="2xl:col-span-1"><label className="lbl">Shift</label>
             <select className="field" value={form.shift} onChange={(e) => set("shift", e.target.value)}><option value="">—</option>{opt(shifts, form.shift).map((o) => <option key={o}>{o}</option>)}</select></div>
           <div className="2xl:col-span-1"><label className="lbl">Manager</label>
@@ -207,7 +217,7 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
           <div><label className="lbl">From</label><input type="date" className="field" value={f.from} onChange={(e) => setFilter({ from: e.target.value })} /></div>
           <div><label className="lbl">To</label><input type="date" className="field" value={f.to} onChange={(e) => setFilter({ to: e.target.value })} /></div>
           <div><label className="lbl">Status</label><select className="field" value={f.status} onChange={(e) => setFilter({ status: e.target.value })}><option value="">All</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select></div>
-          <div><label className="lbl">Office</label><select className="field" value={f.office} onChange={(e) => setFilter({ office: e.target.value })}><option value="">All</option>{allOffices.map((o) => <option key={o}>{o}</option>)}</select></div>
+          <div><label className="lbl">Office</label><select className="field" value={f.office} onChange={(e) => setFilter({ office: e.target.value })}><option value="">All</option>{curAll.map((o) => <option key={o}>{o}</option>)}</select></div>
           <div><label className="lbl">Shift</label><select className="field" value={f.shift} onChange={(e) => setFilter({ shift: e.target.value })}><option value="">All</option>{allShifts.map((o) => <option key={o}>{o}</option>)}</select></div>
           <div className="min-w-[220px] flex-1"><label className="lbl">Search</label>
             <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-ink/40" /><input className="field pl-9" placeholder="Account, customer or remarks" value={qInput} onChange={(e) => setQInput(e.target.value)} /></div></div>

@@ -63,7 +63,7 @@ export default function ImportClient() {
     const sb = createClient();
     const offices = Array.from(new Set(rows.map((r) => r.office).filter(Boolean))) as string[];
     const shifts = Array.from(new Set(rows.map((r) => r.shift).filter(Boolean))) as string[];
-    if (offices.length) await sb.from("offices").upsert(offices.map((name) => ({ name })), { onConflict: "name", ignoreDuplicates: true });
+    if (offices.length) await sb.from(type === "service" ? "service_offices" : "offices").upsert(offices.map((name) => ({ name })), { onConflict: "name", ignoreDuplicates: true });
     if (shifts.length) await sb.from("shifts").upsert(shifts.map((name) => ({ name })), { onConflict: "name", ignoreDuplicates: true });
     const accounts = Array.from(new Set(rows.map((r) => r.account_name)));
     const groups = Array.from(new Set(rows.map((r) => r.grp).filter(Boolean))) as string[];

@@ -6,8 +6,9 @@ import Tabs from "@/components/Tabs";
 
 type Item = { id: number; name: string; active: boolean };
 const LISTS: Record<string, { label: string; one: string; hint: string }> = {
-  accounts: { label: "Chime accounts", one: "account", hint: "Shown as suggestions when entering Account name. Entries must use a name from this list, so typos can't split an account in two." },
-  offices: { label: "Offices", one: "office", hint: "Shown in the Office dropdown and in filters." },
+  accounts: { label: "Accounts", one: "account", hint: "Shown as suggestions when entering Account name. Entries must use a name from this list, so typos can't split an account in two." },
+  offices: { label: "Main offices", one: "office", hint: "Shown in the Office dropdown on the Main sheet and in its filters." },
+  service_offices: { label: "Service offices", one: "service office", hint: "Shown in the Office dropdown on the Service sheet, and used when you link a service on the Services page." },
   shifts: { label: "Shifts", one: "shift", hint: "Shown in the Shift dropdown. Shifts are ordered as created, and Shift closing uses that order to find the previous shift." },
   groups: { label: "Groups", one: "group", hint: "Shown as suggestions in the Group field." },
 };
