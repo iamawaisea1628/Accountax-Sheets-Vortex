@@ -146,8 +146,8 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
         <div className="relative flex rounded-lg bg-[#dfe8e2] p-1">
           {(["main", "service"] as EntryType[]).map((t) => (
             <button key={t} onClick={() => { setType(t); setPage(0); }} className="relative rounded-md px-5 py-1.5 text-sm font-semibold capitalize">
-              {type === t && <motion.span layoutId="type-pill" className="absolute inset-0 rounded-md bg-white shadow-sm" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
-              <span className={`relative ${type === t ? "text-ink" : "text-ink/55"}`}>{t}</span>
+              {type === t && <motion.span layoutId="type-pill" className="absolute inset-0 rounded-md bg-gradient-to-r from-[#1ccb98] to-[#0b7f68] shadow-md shadow-brand/30" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+              <span className={`relative ${type === t ? "text-white" : "text-ink/55"}`}>{t}</span>
             </button>
           ))}
         </div>

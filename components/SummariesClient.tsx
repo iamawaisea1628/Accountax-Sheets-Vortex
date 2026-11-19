@@ -203,7 +203,7 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
           <label className="lbl">Group by</label>
           <div className="flex rounded-lg bg-[#dfe8e2] p-1">
             {GROUPS.map(([g, l]) => (
-              <button key={g} onClick={() => { setGroup(g); setSort({ k: "key", dir: 1 }); }} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${group === g ? "bg-white text-ink shadow-sm" : "text-ink/55 hover:text-ink"}`}>{l}</button>
+              <button key={g} onClick={() => { setGroup(g); setSort({ k: "key", dir: 1 }); }} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${group === g ? "bg-gradient-to-r from-[#1ccb98] to-[#0b7f68] shadow-md shadow-brand/30 text-white" : "text-ink/55 hover:text-ink"}`}>{l}</button>
             ))}
           </div>
         </div>
