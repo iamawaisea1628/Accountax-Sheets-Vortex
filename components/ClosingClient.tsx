@@ -9,9 +9,9 @@ import type { Profile } from "@/lib/types";
 type Row = { account: string; sums: Sums; prev: number; saved: boolean; carried: boolean };
 
 const COLS: [keyof Sums, string][] = [
-  ["opening", "Opening entries"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
+  ["opening", "Opening"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
   ["redeemService", "Redeem-Service"], ["withdraw", "Withdraw"], ["transfer", "Transfer"], ["ads", "Ads"],
-  ["other", "Other"], ["unconfirmed", "Unconfirmed"], ["forfeited", "Forfeited"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
+  ["other", "Other Transaction"], ["unconfirmed", "Unconfirmed"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -91,7 +91,8 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
   const calc = rows.map((r) => {
     const balance = balanceOf(r.sums);
     const closing = parseAmount(inputs[r.account]);
-    return { ...r, balance, closing, diff: closing === null ? null : differenceOf(closing, r.prev, balance) };
+    const net = closing === null && r.sums.unconfirmed === 0 ? null : r2((closing ?? 0) + r.sums.unconfirmed);
+    return { ...r, balance, closing, net, diff: closing === null ? null : differenceOf(closing, r.prev, balance) };
   });
   const entered = calc.filter((r) => r.closing !== null);
   const totalBalance = r2(calc.reduce((s, r) => s + r.balance, 0));
@@ -149,7 +150,8 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead><tr>
-              <th className="th sticky left-0 z-10">Account</th>
+              <th className="th sticky left-0 z-10">Chime</th>
+              <th className="th text-right">Net</th>
               <th className="th text-right">Opening</th>
               <th className="th text-right">Closing</th>
               <th className="th text-right">Difference</th>
@@ -162,6 +164,7 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
                 return (
                   <tr key={r.account} className="hover:bg-brand-soft/40">
                     <td className="td sticky left-0 bg-white font-semibold">{r.account}{r.saved && <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-dark">saved</span>}{r.carried && <span className="ml-2 rounded-full bg-ink/10 px-2 py-0.5 text-[11px] font-semibold text-ink/60">carried over</span>}</td>
+                    <td className="td tnum text-right">{r.net === null ? <span className="text-ink/25">–</span> : fmtMoney(r.net)}</td>
                     <td className="td tnum text-right">{fmtMoney(r.prev)}</td>
                     <td className="td w-36"><input inputMode="decimal" className="field tnum py-1.5 text-right" placeholder="0.00" value={inputs[r.account] ?? ""} onChange={(e) => setInputs((p) => ({ ...p, [r.account]: e.target.value }))} /></td>
                     <td className={`td tnum text-right font-semibold ${r.diff === null ? "text-ink/25" : bad ? "text-danger" : "text-brand-dark"}`}>{r.diff === null ? "–" : fmtMoney(r.diff)}</td>
@@ -171,7 +174,7 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
                 );
               })}
               {!loading && calc.length === 0 && (
-                <tr><td colSpan={5 + COLS.length} className="px-4 py-14 text-center text-sm text-ink/55">No entries or carried-over balances for this date and shift. Add entries on the entry sheet, or pick another date or shift.</td></tr>
+                <tr><td colSpan={6 + COLS.length} className="px-4 py-14 text-center text-sm text-ink/55">No entries or carried-over balances for this date and shift. Add entries on the entry sheet, or pick another date or shift.</td></tr>
               )}
             </tbody>
           </table>

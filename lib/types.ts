@@ -20,8 +20,8 @@ export type Entry = {
 
 // Edit this list any time to change the Status dropdown.
 export const STATUSES = [
-  "Deposit", "Redeem", "Opening", "Withdraw", "Written Off",
-  "Transfer In", "Transfer Out", "Ads", "Other", "Outdoor In", "Outdoor Out",
+  "Deposit", "Redeem", "Opening", "Withdraw", "Transfer In", "Transfer Out",
+  "Ads", "Other Transaction", "Outdoor In", "Outdoor Out",
 ];
 
 export type ServiceStat = {

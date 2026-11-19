@@ -2,20 +2,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Download, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { addEntry, balanceOf, emptySums, r2, type Sums } from "@/lib/closing";
+import { addEntry, emptySums, r2, summaryBalanceOf, type Sums } from "@/lib/closing";
 import { fmtDate, fmtMoney, monthStartISO, todayISO } from "@/lib/format";
 
 type Group = "account" | "office" | "day" | "month" | "shift";
-type SortKey = "key" | "count" | "balance" | "diff" | "openBal" | keyof Sums;
+type SumKey = "deposit" | "redeem" | "depositService" | "redeemService" | "withdraw" | "transfer" | "ads" | "other" | "outdoorIn" | "outdoorOut";
+type SortKey = "key" | "difference" | "closing" | "balance" | "opening" | SumKey;
 type Raw = { entry_date: string; account_name: string; entry_type: "main" | "service"; status: string; amount: number; office: string | null; shift: string | null };
 type Closed = { closing_date: string; shift: string; account_name: string; difference: number };
-type Line = { key: string; count: number; sums: Sums; balance: number; diff: number | null; openBal: number };
+type Line = { key: string; sums: Sums; openBal: number; closing: number; opening: number; balance: number; difference: number };
 
-const GROUPS: [Group, string][] = [["account", "Account"], ["office", "Office"], ["day", "Day"], ["month", "Month"], ["shift", "Shift"]];
-const COLS: [keyof Sums, string][] = [
-  ["opening", "Opening entries"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
-  ["redeemService", "Redeem-Service"], ["withdraw", "Withdraw"], ["transfer", "Transfer"], ["ads", "Ads"],
-  ["other", "Other"], ["unconfirmed", "Unconfirmed"], ["forfeited", "Forfeited"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
+const GROUPS: [Group, string][] = [["account", "Chime"], ["office", "Office"], ["day", "Day"], ["month", "Month"], ["shift", "Shift"]];
+// Column names exactly as in the Summary-Shift sheet (Forfeited Funds removed)
+const COLS: [SumKey, string][] = [
+  ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"], ["redeemService", "Redeem-Service"],
+  ["withdraw", "Withdraw"], ["transfer", "Transfer"], ["ads", "Ads"], ["other", "Other Transaction"],
+  ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
 ];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -46,10 +48,10 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
   const [group, setGroup] = useState<Group>("account");
   const [raw, setRaw] = useState<Raw[]>([]);
   const [closed, setClosed] = useState<Closed[]>([]);
+  const [openMap, setOpenMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: "key", dir: 1 });
-  const [openMap, setOpenMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let live = true;
@@ -80,8 +82,9 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
     return () => { live = false; };
   }, [sb, from, to, office, shift]);
 
-  const showDiff = group !== "office" && !office;
-  // Opening = latest saved closing before the start of the period (per account) or of each month
+  // Closing and Difference come from saved closings, which belong to accounts, not offices
+  const showClosing = group !== "office" && !office;
+  // Opening from closings: latest saved closing before the period (per account) or before each month
   const showOpening = (group === "account" || group === "month") && !office;
 
   useEffect(() => {
@@ -112,30 +115,26 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
   }, [sb, showOpening, group, from, raw]);
 
   const lines = useMemo(() => {
-    const m = new Map<string, Line>();
-    for (const e of raw) {
-      const k = keyOf(group, e);
-      if (!m.has(k)) m.set(k, { key: k, count: 0, sums: emptySums(), balance: 0, diff: null, openBal: 0 });
-      const l = m.get(k)!;
-      l.count++;
-      addEntry(l.sums, e);
-    }
-    if (showDiff) {
+    const m = new Map<string, { sums: Sums; closing: number }>();
+    const get = (k: string) => { if (!m.has(k)) m.set(k, { sums: emptySums(), closing: 0 }); return m.get(k)!; };
+    for (const e of raw) addEntry(get(keyOf(group, e)).sums, e);
+    if (showClosing) {
       for (const c of closed) {
         const k = keyOf(group, { entry_date: c.closing_date, account_name: c.account_name, office: null, shift: c.shift });
-        const l = m.get(k);
-        if (l) l.diff = r2((l.diff ?? 0) + Number(c.difference));
+        if (m.has(k)) m.get(k)!.closing = r2(m.get(k)!.closing + Number(c.difference));
       }
     }
     if (group === "account" && showOpening) {
-      for (const [a, v] of Object.entries(openMap)) {
-        if (Math.abs(v) > 0.005 && !m.has(a)) m.set(a, { key: a, count: 0, sums: emptySums(), balance: 0, diff: null, openBal: 0 });
-      }
+      for (const [a, v] of Object.entries(openMap)) if (Math.abs(v) > 0.005) get(a);
     }
-    const out = Array.from(m.values());
-    out.forEach((l) => { l.balance = balanceOf(l.sums); l.openBal = showOpening ? openMap[l.key] ?? 0 : 0; });
+    const out: Line[] = Array.from(m.entries()).map(([key, v]) => {
+      const openBal = showOpening ? openMap[key] ?? 0 : 0;
+      const opening = r2(openBal + v.sums.opening);
+      const balance = summaryBalanceOf(v.sums, opening);
+      return { key, sums: v.sums, openBal, closing: v.closing, opening, balance, difference: r2(v.closing + balance) };
+    });
     const val = (l: Line): number | string =>
-      sort.k === "key" ? l.key : sort.k === "count" ? l.count : sort.k === "balance" ? l.balance : sort.k === "diff" ? l.diff ?? 0 : sort.k === "openBal" ? l.openBal : l.sums[sort.k];
+      sort.k === "key" ? l.key : sort.k === "difference" ? l.difference : sort.k === "closing" ? l.closing : sort.k === "balance" ? l.balance : sort.k === "opening" ? l.opening : l.sums[sort.k];
     const dflt = group === "day" || group === "month" ? -1 : 1;
     out.sort((a, b) => {
       const x = val(a), y = val(b);
@@ -143,16 +142,16 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
       return c * sort.dir * (sort.k === "key" ? dflt : 1);
     });
     return out;
-  }, [raw, closed, group, showDiff, showOpening, openMap, sort]);
+  }, [raw, closed, group, showClosing, showOpening, openMap, sort]);
 
   const total = useMemo(() => {
     const s = emptySums();
-    let count = 0, diff = 0, open = 0;
+    let closing = 0, opening = 0, balance = 0, difference = 0;
     for (const l of lines) {
-      count += l.count; diff += l.diff ?? 0; open += l.openBal;
+      closing += l.closing; opening += l.opening; balance += l.balance; difference += l.difference;
       (Object.keys(s) as (keyof Sums)[]).forEach((k) => (s[k] = r2(s[k] + l.sums[k])));
     }
-    return { sums: s, count, balance: balanceOf(s), diff: r2(diff), openBal: r2(open) };
+    return { sums: s, closing: r2(closing), opening: r2(opening), balance: r2(balance), difference: r2(difference) };
   }, [lines]);
 
   function toggle(k: SortKey) { setSort((p) => (p.k === k ? { k, dir: (p.dir * -1) as 1 | -1 } : { k, dir: k === "key" ? 1 : -1 })); }
@@ -169,9 +168,9 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
 
   function exportCsv() {
     const q = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const head = [GROUPS.find((g) => g[0] === group)![1], "Entries", ...(showOpening ? ["Opening"] : []), ...COLS.map((c) => c[1]), "Balance", ...(showDiff ? ["Closing difference"] : [])];
-    const body = lines.map((l) => [label(group, l.key), l.count, ...(showOpening ? [l.openBal] : []), ...COLS.map(([k]) => l.sums[k]), l.balance, ...(showDiff ? [l.diff ?? ""] : [])]);
-    const foot = ["Total", total.count, ...(showOpening ? [total.openBal] : []), ...COLS.map(([k]) => total.sums[k]), total.balance, ...(showDiff ? [total.diff] : [])];
+    const head = [GROUPS.find((g) => g[0] === group)![1], "Difference", "Closing", "Balance", "Opening", ...COLS.map((c) => c[1])];
+    const body = lines.map((l) => [label(group, l.key), l.difference, l.closing, l.balance, l.opening, ...COLS.map(([k]) => l.sums[k])]);
+    const foot = ["Total", total.difference, total.closing, total.balance, total.opening, ...COLS.map(([k]) => total.sums[k])];
     const csv = [head, ...body, foot].map((r) => r.map(q).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
@@ -184,7 +183,7 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Summaries</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink/60">Built live from the entry sheet. Group by account, office, day, month or shift.</p>
+          <p className="mt-1 max-w-2xl text-sm text-ink/60">Built live from the entry sheet, with the same columns as your Summary sheet. Group by Chime, office, day, month or shift.</p>
         </div>
         <button className="btn-ghost" onClick={exportCsv} disabled={lines.length === 0}><Download className="h-4 w-4" /> Export CSV</button>
       </div>
@@ -203,15 +202,14 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
           <label className="lbl">Group by</label>
           <div className="flex rounded-lg bg-[#dfe8e2] p-1">
             {GROUPS.map(([g, l]) => (
-              <button key={g} onClick={() => { setGroup(g); setSort({ k: "key", dir: 1 }); }} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${group === g ? "bg-gradient-to-r from-[#1ccb98] to-[#0b7f68] shadow-md shadow-brand/30 text-white" : "text-ink/55 hover:text-ink"}`}>{l}</button>
+              <button key={g} onClick={() => { setGroup(g); setSort({ k: "key", dir: 1 }); }} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${group === g ? "bg-gradient-to-r from-[#1ccb98] to-[#0b7f68] text-white shadow-md shadow-brand/30" : "text-ink/55 hover:text-ink"}`}>{l}</button>
             ))}
           </div>
         </div>
       </div>
 
       <p className="mt-4 text-sm text-ink/70 tnum">
-        {lines.length} {lines.length === 1 ? "row" : "rows"} · {total.count.toLocaleString()} entries · balance {fmtMoney(total.balance)}
-        {showDiff && closed.length > 0 && <> · closing difference {fmtMoney(total.diff)}</>}
+        {lines.length} {lines.length === 1 ? "row" : "rows"} · Balance {fmtMoney(total.balance)}
         {loading && <Loader2 className="ml-2 inline h-4 w-4 animate-spin" />}
       </p>
       {err && <p role="alert" className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p>}
@@ -225,31 +223,31 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
                   {GROUPS.find((g) => g[0] === group)![1]}{sort.k === "key" && (sort.dir === 1 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
                 </button>
               </th>
-              <Th k="count">Entries</Th>
-              {showOpening && <Th k="openBal">Opening</Th>}
-              {COLS.map(([k, l]) => <Th key={k} k={k}>{l}</Th>)}
+              <Th k="difference">Difference</Th>
+              <Th k="closing">Closing</Th>
               <Th k="balance">Balance</Th>
-              {showDiff && <Th k="diff">Closing difference</Th>}
+              <Th k="opening">Opening</Th>
+              {COLS.map(([k, l]) => <Th key={k} k={k}>{l}</Th>)}
             </tr></thead>
             <tbody className={loading ? "opacity-50 transition" : "transition"}>
               {lines.length > 0 && (
                 <tr className="bg-brand-soft/60 font-semibold">
                   <td className="td sticky left-0 bg-[#e3f2ea]">Total</td>
-                  <td className="td tnum text-right">{total.count.toLocaleString()}</td>
-                  {showOpening && <td className="td tnum text-right">{fmtMoney(total.openBal)}</td>}
-                  {COLS.map(([k]) => <td key={k} className="td tnum text-right">{cell(total.sums[k])}</td>)}
+                  <td className="td tnum text-right">{fmtMoney(total.difference)}</td>
+                  <td className="td tnum text-right">{cell(total.closing)}</td>
                   <td className="td tnum text-right">{fmtMoney(total.balance)}</td>
-                  {showDiff && <td className="td tnum text-right">{cell(total.diff)}</td>}
+                  <td className="td tnum text-right">{cell(total.opening)}</td>
+                  {COLS.map(([k]) => <td key={k} className="td tnum text-right">{cell(total.sums[k])}</td>)}
                 </tr>
               )}
               {lines.map((l) => (
                 <tr key={l.key} className="hover:bg-brand-soft/40">
                   <td className="td sticky left-0 bg-white font-semibold">{label(group, l.key)}</td>
-                  <td className="td tnum text-right text-ink/60">{l.count.toLocaleString()}</td>
-                  {showOpening && <td className="td tnum text-right font-semibold">{fmtMoney(l.openBal)}</td>}
-                  {COLS.map(([k]) => <td key={k} className="td tnum text-right">{cell(l.sums[k])}</td>)}
+                  <td className={`td tnum text-right font-semibold ${Math.abs(l.difference) > 0.005 ? "text-danger" : "text-brand-dark"}`}>{fmtMoney(l.difference)}</td>
+                  <td className="td tnum text-right">{cell(l.closing)}</td>
                   <td className="td tnum text-right font-semibold">{fmtMoney(l.balance)}</td>
-                  {showDiff && <td className={`td tnum text-right font-semibold ${l.diff === null ? "text-ink/25" : Math.abs(l.diff) > 0.005 ? "text-danger" : "text-brand-dark"}`}>{l.diff === null ? "–" : fmtMoney(l.diff)}</td>}
+                  <td className="td tnum text-right">{cell(l.opening)}</td>
+                  {COLS.map(([k]) => <td key={k} className="td tnum text-right">{cell(l.sums[k])}</td>)}
                 </tr>
               ))}
               {!loading && lines.length === 0 && (
