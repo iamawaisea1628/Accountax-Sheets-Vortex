@@ -6,14 +6,14 @@ import { addEntry, balanceOf, emptySums, r2, type Sums } from "@/lib/closing";
 import { fmtDate, fmtMoney, monthStartISO, todayISO } from "@/lib/format";
 
 type Group = "account" | "office" | "day" | "month" | "shift";
-type SortKey = "key" | "count" | "balance" | "diff" | keyof Sums;
+type SortKey = "key" | "count" | "balance" | "diff" | "openBal" | keyof Sums;
 type Raw = { entry_date: string; account_name: string; entry_type: "main" | "service"; status: string; amount: number; office: string | null; shift: string | null };
 type Closed = { closing_date: string; shift: string; account_name: string; difference: number };
-type Line = { key: string; count: number; sums: Sums; balance: number; diff: number | null };
+type Line = { key: string; count: number; sums: Sums; balance: number; diff: number | null; openBal: number };
 
 const GROUPS: [Group, string][] = [["account", "Account"], ["office", "Office"], ["day", "Day"], ["month", "Month"], ["shift", "Shift"]];
 const COLS: [keyof Sums, string][] = [
-  ["opening", "Opening entry"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
+  ["opening", "Opening entries"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
   ["redeemService", "Redeem-Service"], ["withdraw", "Withdraw"], ["transfer", "Transfer"], ["ads", "Ads"],
   ["other", "Other"], ["unconfirmed", "Unconfirmed"], ["forfeited", "Forfeited"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
 ];
@@ -49,6 +49,7 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: "key", dir: 1 });
+  const [openMap, setOpenMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let live = true;
@@ -80,12 +81,41 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
   }, [sb, from, to, office, shift]);
 
   const showDiff = group !== "office" && !office;
+  // Opening = latest saved closing before the start of the period (per account) or of each month
+  const showOpening = (group === "account" || group === "month") && !office;
+
+  useEffect(() => {
+    if (!showOpening) { setOpenMap({}); return; }
+    let live = true;
+    (async () => {
+      const m: Record<string, number> = {};
+      try {
+        if (group === "account") {
+          if (from) {
+            const { data, error } = await sb.rpc("opening_balances", { p_before: from });
+            if (error) throw new Error(error.message);
+            ((data ?? []) as { account_name: string; closing: number }[]).forEach((r) => { m[r.account_name] = Number(r.closing); });
+          }
+        } else {
+          for (const mo of Array.from(new Set(raw.map((e) => e.entry_date.slice(0, 7))))) {
+            const { data, error } = await sb.rpc("opening_balances", { p_before: `${mo}-01` });
+            if (error) throw new Error(error.message);
+            m[mo] = r2(((data ?? []) as { closing: number }[]).reduce((t, r) => t + Number(r.closing), 0));
+          }
+        }
+        if (live) setOpenMap(m);
+      } catch (x) {
+        if (live) setErr(`Opening balances unavailable: ${x instanceof Error ? x.message : "unknown error"}`);
+      }
+    })();
+    return () => { live = false; };
+  }, [sb, showOpening, group, from, raw]);
 
   const lines = useMemo(() => {
     const m = new Map<string, Line>();
     for (const e of raw) {
       const k = keyOf(group, e);
-      if (!m.has(k)) m.set(k, { key: k, count: 0, sums: emptySums(), balance: 0, diff: null });
+      if (!m.has(k)) m.set(k, { key: k, count: 0, sums: emptySums(), balance: 0, diff: null, openBal: 0 });
       const l = m.get(k)!;
       l.count++;
       addEntry(l.sums, e);
@@ -97,10 +127,15 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
         if (l) l.diff = r2((l.diff ?? 0) + Number(c.difference));
       }
     }
+    if (group === "account" && showOpening) {
+      for (const [a, v] of Object.entries(openMap)) {
+        if (Math.abs(v) > 0.005 && !m.has(a)) m.set(a, { key: a, count: 0, sums: emptySums(), balance: 0, diff: null, openBal: 0 });
+      }
+    }
     const out = Array.from(m.values());
-    out.forEach((l) => (l.balance = balanceOf(l.sums)));
+    out.forEach((l) => { l.balance = balanceOf(l.sums); l.openBal = showOpening ? openMap[l.key] ?? 0 : 0; });
     const val = (l: Line): number | string =>
-      sort.k === "key" ? l.key : sort.k === "count" ? l.count : sort.k === "balance" ? l.balance : sort.k === "diff" ? l.diff ?? 0 : l.sums[sort.k];
+      sort.k === "key" ? l.key : sort.k === "count" ? l.count : sort.k === "balance" ? l.balance : sort.k === "diff" ? l.diff ?? 0 : sort.k === "openBal" ? l.openBal : l.sums[sort.k];
     const dflt = group === "day" || group === "month" ? -1 : 1;
     out.sort((a, b) => {
       const x = val(a), y = val(b);
@@ -108,16 +143,16 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
       return c * sort.dir * (sort.k === "key" ? dflt : 1);
     });
     return out;
-  }, [raw, closed, group, showDiff, sort]);
+  }, [raw, closed, group, showDiff, showOpening, openMap, sort]);
 
   const total = useMemo(() => {
     const s = emptySums();
-    let count = 0, diff = 0;
+    let count = 0, diff = 0, open = 0;
     for (const l of lines) {
-      count += l.count; diff += l.diff ?? 0;
+      count += l.count; diff += l.diff ?? 0; open += l.openBal;
       (Object.keys(s) as (keyof Sums)[]).forEach((k) => (s[k] = r2(s[k] + l.sums[k])));
     }
-    return { sums: s, count, balance: balanceOf(s), diff: r2(diff) };
+    return { sums: s, count, balance: balanceOf(s), diff: r2(diff), openBal: r2(open) };
   }, [lines]);
 
   function toggle(k: SortKey) { setSort((p) => (p.k === k ? { k, dir: (p.dir * -1) as 1 | -1 } : { k, dir: k === "key" ? 1 : -1 })); }
@@ -134,9 +169,9 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
 
   function exportCsv() {
     const q = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const head = [GROUPS.find((g) => g[0] === group)![1], "Entries", ...COLS.map((c) => c[1]), "Balance", ...(showDiff ? ["Closing difference"] : [])];
-    const body = lines.map((l) => [label(group, l.key), l.count, ...COLS.map(([k]) => l.sums[k]), l.balance, ...(showDiff ? [l.diff ?? ""] : [])]);
-    const foot = ["Total", total.count, ...COLS.map(([k]) => total.sums[k]), total.balance, ...(showDiff ? [total.diff] : [])];
+    const head = [GROUPS.find((g) => g[0] === group)![1], "Entries", ...(showOpening ? ["Opening"] : []), ...COLS.map((c) => c[1]), "Balance", ...(showDiff ? ["Closing difference"] : [])];
+    const body = lines.map((l) => [label(group, l.key), l.count, ...(showOpening ? [l.openBal] : []), ...COLS.map(([k]) => l.sums[k]), l.balance, ...(showDiff ? [l.diff ?? ""] : [])]);
+    const foot = ["Total", total.count, ...(showOpening ? [total.openBal] : []), ...COLS.map(([k]) => total.sums[k]), total.balance, ...(showDiff ? [total.diff] : [])];
     const csv = [head, ...body, foot].map((r) => r.map(q).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
@@ -191,6 +226,7 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
                 </button>
               </th>
               <Th k="count">Entries</Th>
+              {showOpening && <Th k="openBal">Opening</Th>}
               {COLS.map(([k, l]) => <Th key={k} k={k}>{l}</Th>)}
               <Th k="balance">Balance</Th>
               {showDiff && <Th k="diff">Closing difference</Th>}
@@ -200,6 +236,7 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
                 <tr className="bg-brand-soft/60 font-semibold">
                   <td className="td sticky left-0 bg-[#e3f2ea]">Total</td>
                   <td className="td tnum text-right">{total.count.toLocaleString()}</td>
+                  {showOpening && <td className="td tnum text-right">{fmtMoney(total.openBal)}</td>}
                   {COLS.map(([k]) => <td key={k} className="td tnum text-right">{cell(total.sums[k])}</td>)}
                   <td className="td tnum text-right">{fmtMoney(total.balance)}</td>
                   {showDiff && <td className="td tnum text-right">{cell(total.diff)}</td>}
@@ -209,13 +246,14 @@ export default function SummariesClient({ offices, shifts }: { offices: string[]
                 <tr key={l.key} className="hover:bg-brand-soft/40">
                   <td className="td sticky left-0 bg-white font-semibold">{label(group, l.key)}</td>
                   <td className="td tnum text-right text-ink/60">{l.count.toLocaleString()}</td>
+                  {showOpening && <td className="td tnum text-right font-semibold">{fmtMoney(l.openBal)}</td>}
                   {COLS.map(([k]) => <td key={k} className="td tnum text-right">{cell(l.sums[k])}</td>)}
                   <td className="td tnum text-right font-semibold">{fmtMoney(l.balance)}</td>
                   {showDiff && <td className={`td tnum text-right font-semibold ${l.diff === null ? "text-ink/25" : Math.abs(l.diff) > 0.005 ? "text-danger" : "text-brand-dark"}`}>{l.diff === null ? "–" : fmtMoney(l.diff)}</td>}
                 </tr>
               ))}
               {!loading && lines.length === 0 && (
-                <tr><td colSpan={COLS.length + 4} className="px-4 py-14 text-center text-sm text-ink/55">No entries in this range. Widen the dates or clear a filter.</td></tr>
+                <tr><td colSpan={COLS.length + 5} className="px-4 py-14 text-center text-sm text-ink/55">No entries in this range. Widen the dates or clear a filter.</td></tr>
               )}
             </tbody>
           </table>

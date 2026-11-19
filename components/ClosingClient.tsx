@@ -9,7 +9,7 @@ import type { Profile } from "@/lib/types";
 type Row = { account: string; sums: Sums; prev: number; saved: boolean; carried: boolean };
 
 const COLS: [keyof Sums, string][] = [
-  ["opening", "Opening entry"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
+  ["opening", "Opening entries"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
   ["redeemService", "Redeem-Service"], ["withdraw", "Withdraw"], ["transfer", "Transfer"], ["ads", "Ads"],
   ["other", "Other"], ["unconfirmed", "Unconfirmed"], ["forfeited", "Forfeited"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
 ];
@@ -150,7 +150,7 @@ export default function ClosingClient({ profile, shifts }: { profile: Profile; s
           <table className="w-full border-collapse">
             <thead><tr>
               <th className="th sticky left-0 z-10">Account</th>
-              <th className="th text-right">Last closing</th>
+              <th className="th text-right">Opening</th>
               <th className="th text-right">Closing</th>
               <th className="th text-right">Difference</th>
               <th className="th text-right">Balance</th>
