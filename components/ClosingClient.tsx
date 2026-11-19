@@ -11,7 +11,7 @@ type Row = { account: string; sums: Sums; prev: number; saved: boolean; carried:
 const COLS: [keyof Sums, string][] = [
   ["opening", "Opening"], ["deposit", "Deposit"], ["redeem", "Redeem"], ["depositService", "Deposit-Service"],
   ["redeemService", "Redeem-Service"], ["withdraw", "Withdraw"], ["transfer", "Transfer"], ["ads", "Ads"],
-  ["other", "Other Transaction"], ["unconfirmed", "Unconfirmed"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
+  ["other", "Other Transaction"], ["unconfirmed", "Unconfirmed"], ["writtenOff", "Written Off"], ["outdoorIn", "Outdoor In"], ["outdoorOut", "Outdoor Out"],
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

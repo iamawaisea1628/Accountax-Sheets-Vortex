@@ -16,7 +16,7 @@ const pill: Record<string, string> = {
   Opening: "bg-ink/10 text-ink",
 };
 const GREEN = ["Deposit", "Transfer In", "Outdoor In"];
-const RED = ["Redeem", "Withdraw", "Transfer Out", "Ads", "Outdoor Out"];
+const RED = ["Redeem", "Withdraw", "Transfer Out", "Ads", "Written Off", "Outdoor Out"];
 const amountColor = (s: string) => (GREEN.includes(s) ? "text-brand-dark" : RED.includes(s) ? "text-danger" : "text-ink");
 
 export default function EntrySheet({ profile, offices, shifts, allOffices, allShifts, accounts, groups, managers }: Props) {
@@ -154,7 +154,17 @@ export default function EntrySheet({ profile, offices, shifts, allOffices, allSh
       </div>
 
       <form ref={formRef} onSubmit={save} className={`card mt-6 p-4 transition ${editing ? "ring-2 ring-gold/60" : ""}`}>
-        {editing && <p className="mb-3 text-sm font-semibold text-gold">Editing entry #{editing}</p>}
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${type === "main" ? "bg-brand-soft text-brand-dark" : "bg-gold/20 text-[#8a5f0a]"}`}>{type === "main" ? "Main sheet" : "Service sheet"}</span>
+          <span className="text-ink/55">New entries are saved to the {type === "main" ? "Main" : "Service"} sheet.</span>
+          {editing && <span className="font-semibold text-gold">Editing entry #{editing}</span>}
+        </div>
+        {type === "main" && form.office === "Unconfirmed" && (
+          <div role="note" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-gold/15 px-3 py-2 text-sm text-[#7a520a]">
+            <span>Unconfirmed entries belong on the Service sheet. On the Main sheet they will not count as Unconfirmed.</span>
+            <button type="button" className="btn-ghost !px-3 !py-1" onClick={() => { setType("service"); setPage(0); }}>Switch to Service sheet</button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-12">
           <div className="2xl:col-span-1"><label className="lbl">Date</label><input type="date" className="field" value={form.entry_date} onChange={(e) => set("entry_date", e.target.value)} /></div>
           <div className="2xl:col-span-2"><label className="lbl">Account name</label><input className="field" list="acct-list" autoComplete="off" value={form.account_name} onChange={(e) => { set("account_name", e.target.value); setAddAcct(""); }} placeholder="Start typing…" /><datalist id="acct-list">{accts.map((a) => <option key={a} value={a} />)}</datalist></div>
