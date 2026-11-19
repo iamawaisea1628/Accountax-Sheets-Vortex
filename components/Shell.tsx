@@ -19,9 +19,9 @@ const nav = [
 export const initials = (p: Profile) =>
   (p.full_name || p.email || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 
-function Nav({ profile, path, always }: { profile: Profile; path: string; always?: boolean }) {
+function Nav({ profile, path, open, mobile, onNavigate }: { profile: Profile; path: string; open: boolean; mobile?: boolean; onNavigate?: () => void }) {
   // Labels are hidden until the sidebar is hovered (always = mobile drawer, where they stay visible).
-  const t = always ? "" : "opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100";
+  const t = open ? "opacity-100 transition-opacity duration-150" : "pointer-events-none opacity-0 transition-opacity duration-100";
   return (
     <div className="p-3 text-white">
       <div className="flex items-center gap-3 px-2 py-2">
@@ -33,8 +33,8 @@ function Nav({ profile, path, always }: { profile: Profile; path: string; always
         {nav.filter((n) => !n.admin || profile.role === "admin").map((n) => {
           const active = path.startsWith(n.href);
           return (
-            <Link key={n.href} href={n.href} title={n.label} className="relative flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-white/75 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40">
-              {active && <motion.span layoutId={always ? "nav-pill-m" : "nav-pill"} className="absolute inset-0 rounded-lg bg-gradient-to-r from-white/20 to-white/5 ring-1 ring-white/15" transition={{ type: "spring", stiffness: 400, damping: 34 }} />}
+            <Link key={n.href} href={n.href} title={n.label} onClick={onNavigate} className="relative flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-white/75 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40">
+              {active && <motion.span layoutId={mobile ? "nav-pill-m" : "nav-pill"} className="absolute inset-0 rounded-lg bg-gradient-to-r from-white/20 to-white/5 ring-1 ring-white/15" transition={{ type: "spring", stiffness: 400, damping: 34 }} />}
               <n.icon className="relative h-5 w-5 shrink-0" />
               <span className={`relative whitespace-nowrap ${t}`}>{n.label}</span>
             </Link>
@@ -104,6 +104,10 @@ export default function Shell({ profile, children }: { profile: Profile; childre
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  // Desktop sidebar: expands on hover, and collapses right after you click a page
+  const [hover, setHover] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const expanded = hover && !locked;
   useEffect(() => setOpen(false), [path]);
 
   async function signOut() {
@@ -115,8 +119,14 @@ export default function Shell({ profile, children }: { profile: Profile; childre
   return (
     <div className="min-h-screen w-full">
       {/* Desktop sidebar: icons only, expands while hovered or focused */}
-      <aside className="group fixed inset-y-0 left-0 z-40 hidden w-[4.5rem] overflow-hidden bg-gradient-to-b from-[#06242a] via-[#0b3b3d] to-[#0b5a4c] shadow-xl transition-[width] duration-200 ease-out focus-within:w-64 hover:w-64 lg:block">
-        <Nav profile={profile} path={path} />
+      <aside
+        onMouseEnter={() => !locked && setHover(true)}
+        onMouseLeave={() => { setHover(false); setLocked(false); }}
+        onFocus={() => !locked && setHover(true)}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHover(false); }}
+        className={`fixed inset-y-0 left-0 z-40 hidden overflow-hidden bg-gradient-to-b from-[#06242a] via-[#0b3b3d] to-[#0b5a4c] shadow-xl transition-[width] duration-200 ease-out lg:block ${expanded ? "w-64" : "w-[4.5rem]"}`}
+      >
+        <Nav profile={profile} path={path} open={expanded} onNavigate={() => setLocked(true)} />
       </aside>
 
       <header className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-r from-white/80 to-[#e9f6ef]/80 px-4 py-3 backdrop-blur sm:px-6 lg:pl-[5.5rem] lg:pr-8">
@@ -134,7 +144,7 @@ export default function Shell({ profile, children }: { profile: Profile; childre
             <motion.div key="o" className="fixed inset-0 z-40 bg-black/40 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)} />
             <motion.aside key="d" className="fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-[#06242a] via-[#0b3b3d] to-[#0b5a4c] lg:hidden" initial={{ x: -270 }} animate={{ x: 0 }} exit={{ x: -270 }} transition={{ type: "tween", duration: 0.22 }}>
               <button aria-label="Close menu" onClick={() => setOpen(false)} className="absolute right-3 top-4 rounded-lg p-1.5 text-white/70 hover:bg-white/10"><X className="h-5 w-5" /></button>
-              <Nav profile={profile} path={path} always />
+              <Nav profile={profile} path={path} open mobile />
             </motion.aside>
           </>
         )}
